@@ -150,7 +150,20 @@
       appearance: none;
     }
 
-    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+    input[type="date"], input[type="time"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 15px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus, input[type="password"]:focus, input[type="date"]:focus, input[type="time"]:focus, select:focus {
       border-color: var(--accent);
     }
 
@@ -399,12 +412,29 @@
       </div>
       <button class="btn" id="searchBtn" onclick="search()">Search</button>
     </div>
-    <div class="options-row">
-      <select id="granularity">
-        <option value="day" selected>By day</option>
-        <option value="hour">By hour</option>
-      </select>
+    
+    <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+      <label class="field-label">Start date & time</label>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1rem;">
+        <div>
+          <input type="date" id="startDate" />
+        </div>
+        <div>
+          <input type="time" id="startTime" />
+        </div>
+      </div>
+      
+      <label class="field-label">End date & time</label>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1rem;">
+        <div>
+          <input type="date" id="endDate" />
+        </div>
+        <div>
+          <input type="time" id="endTime" />
+        </div>
+      </div>
     </div>
+    
     <div class="error-box" id="errorBox"></div>
   </div>
 
@@ -445,13 +475,15 @@
     <p>
       Get your token from the
       <a href="https://developer.x.com" target="_blank" rel="noopener">X Developer Portal</a>.
-      It's stored only in your browser — never sent anywhere except to X's API.
+      Your custom token is saved in your browser and overrides the default.
     </p>
-    <label class="field-label">Bearer Token</label>
-    <input type="password" id="tokenInput" placeholder="AAAA..." style="margin-bottom: 0;" />
+    <div id="tokenSourceBadge" style="font-size:12px; margin-bottom:12px; padding: 6px 10px; border-radius:6px; background: var(--surface2); color: var(--muted);"></div>
+    <label class="field-label">Override with your own token</label>
+    <input type="password" id="tokenInput" placeholder="AAAA…  (leave blank to use default)" style="margin-bottom: 0;" />
     <div class="modal-actions">
+      <button class="btn-ghost" id="clearTokenBtn" onclick="clearToken()" style="margin-right:auto;">Clear override</button>
       <button class="btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="saveToken()">Save token</button>
+      <button class="btn" onclick="saveToken()">Save</button>
     </div>
   </div>
 </div>
@@ -463,17 +495,23 @@
 <script>
 let chartInstance = null;
 
+// ── Default token — replace this with your Bearer Token ──
+const DEFAULT_TOKEN = 'AAAAAAAAAAAAAAAAAAAAAOeO%2BAEAAAAAnbF21c4XsClT51CybBWkg3trNV0%3DKGF45UUCnJP6FrR0S9Xh9zXN5HiGBJYc4VhsRE8xBFaqurH0p1';
+
 function loadToken() {
-  return localStorage.getItem('x_bearer_token') || '';
+  return localStorage.getItem('x_bearer_token') || DEFAULT_TOKEN || '';
 }
 
 function updateTokenUI() {
-  const t = loadToken();
+  const saved = localStorage.getItem('x_bearer_token');
   const dot = document.getElementById('tokenDot');
   const label = document.getElementById('tokenLabel');
-  if (t) {
+  if (saved) {
     dot.classList.add('active');
-    label.textContent = 'Token set';
+    label.textContent = 'Custom token';
+  } else if (DEFAULT_TOKEN && DEFAULT_TOKEN !== 'PASTE_YOUR_BEARER_TOKEN_HERE') {
+    dot.classList.add('active');
+    label.textContent = 'Default token';
   } else {
     dot.classList.remove('active');
     label.textContent = 'Set up token';
@@ -481,9 +519,31 @@ function updateTokenUI() {
 }
 
 function openModal() {
-  document.getElementById('tokenInput').value = loadToken();
+  const saved = localStorage.getItem('x_bearer_token');
+  document.getElementById('tokenInput').value = saved || '';
+  const badge = document.getElementById('tokenSourceBadge');
+  const clearBtn = document.getElementById('clearTokenBtn');
+  if (saved) {
+    badge.textContent = '✦ Using your custom token (overrides default)';
+    badge.style.color = 'var(--success)';
+    clearBtn.style.display = '';
+  } else if (DEFAULT_TOKEN && DEFAULT_TOKEN !== 'PASTE_YOUR_BEARER_TOKEN_HERE') {
+    badge.textContent = '✦ Using default token (hardcoded in HTML)';
+    badge.style.color = 'var(--accent)';
+    clearBtn.style.display = 'none';
+  } else {
+    badge.textContent = '✦ No token set — enter one below';
+    badge.style.color = 'var(--danger)';
+    clearBtn.style.display = 'none';
+  }
   document.getElementById('modalOverlay').classList.add('open');
   setTimeout(() => document.getElementById('tokenInput').focus(), 50);
+}
+
+function clearToken() {
+  localStorage.removeItem('x_bearer_token');
+  updateTokenUI();
+  closeModal();
 }
 
 function closeModal() {
@@ -532,15 +592,32 @@ async function search() {
   if (!raw) { showError('Enter a hashtag to search.'); return; }
 
   const tag = '#' + raw.replace(/^#+/, '');
-  const granularity = document.getElementById('granularity').value;
+  const granularity = 'day'; // Default granularity
+  const startDate = document.getElementById('startDate').value;
+  const startTime = document.getElementById('startTime').value;
+  const endDate = document.getElementById('endDate').value;
+  const endTime = document.getElementById('endTime').value;
   const btn = document.getElementById('searchBtn');
+
+  // Validate date/time inputs
+  if (startDate && !startTime) { showError('Start time is required when start date is set.'); return; }
+  if (endDate && !endTime) { showError('End time is required when end date is set.'); return; }
+  if (startDate && endDate && startDate > endDate) { showError('Start date cannot be after end date.'); return; }
+
+  // Build datetime strings (ISO 8601 format)
+  let startDateTime = startDate && startTime ? `${startDate}T${startTime}:00` : null;
+  let endDateTime = endDate && endTime ? `${endDate}T${endTime}:00` : null;
 
   btn.disabled = true;
   document.getElementById('loading').style.display = 'block';
 
   try {
+    let url = `https://ancient-butterfly-64f7.phuongnguyen-141228.workers.dev/?query=${encodeURIComponent(tag)}&granularity=${granularity}&timezone=Asia/Bangkok`;
+    if (startDateTime) url += `&start_time=${encodeURIComponent(startDateTime)}`;
+    if (endDateTime) url += `&end_time=${encodeURIComponent(endDateTime)}`;
+
     const res = await fetch(
-      `https://api.x.com/2/tweets/counts/recent?query=${encodeURIComponent(tag)}&granularity=${granularity}`,
+      url,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
