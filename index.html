@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hashtag Counter — X Post Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #1a1a1a;
+      --border: #222222;
+      --border2: #2e2e2e;
+      --text: #f0f0f0;
+      --muted: #666;
+      --accent: #1d9bf0;
+      --accent-dim: rgba(29,155,240,0.12);
+      --danger: #ff4545;
+      --danger-dim: rgba(255,69,69,0.1);
+      --success: #22c55e;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Inter', sans-serif;
+      --radius: 10px;
+      --radius-lg: 16px;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .logo svg { opacity: 0.9; }
+
+    .token-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      transition: border-color 0.15s;
+    }
+
+    .token-status:hover { border-color: var(--border2); color: var(--text); }
+    .token-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+    .token-dot.active { background: var(--success); }
+
+    main {
+      flex: 1;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 600;
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+      font-family: var(--mono);
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .hashtag-input-wrap {
+      position: relative;
+      flex: 1;
+    }
+
+    .hashtag-prefix {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: var(--mono);
+      font-size: 16px;
+      color: var(--accent);
+      font-weight: 500;
+      pointer-events: none;
+    }
+
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 15px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      appearance: none;
+    }
+
+    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    #hashtagInput {
+      padding-left: 28px;
+      font-family: var(--mono);
+      font-size: 15px;
+      letter-spacing: 0.3px;
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--sans);
+      font-size: 15px;
+      font-weight: 500;
+      padding: 11px 22px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:hover { opacity: 0.88; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .options-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .options-row select {
+      flex: 1;
+    }
+
+    select option { background: #1a1a1a; }
+
+    .error-box {
+      display: none;
+      background: var(--danger-dim);
+      border: 1px solid rgba(255,69,69,0.3);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--danger);
+      margin-top: 1rem;
+      line-height: 1.5;
+    }
+
+    .results { display: none; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 1.25rem;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .stat-value.accent { color: var(--accent); }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+
+    .chart-title {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .chart-tag {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 2.5rem;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 440px;
+    }
+
+    .modal h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .modal p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 1.25rem;
+    }
+
+    .modal p a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 1.25rem;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      border-radius: var(--radius);
+      font-family: var(--sans);
+      font-size: 14px;
+      padding: 9px 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+
+    label.field-label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 500px) {
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      header { padding: 1rem; }
+      main { padding: 2rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+    Hashtag Counter
+  </div>
+  <div class="token-status" onclick="openModal()" title="Configure your Bearer Token">
+    <span class="token-dot" id="tokenDot"></span>
+    <span id="tokenLabel">Set up token</span>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <h1>How many posts use<br><span>#yourhashtag</span>?</h1>
+    <p>Enter any hashtag to see post counts from the last 7 days, powered by the X API.</p>
+  </div>
+
+  <div class="search-card">
+    <div class="search-row">
+      <div class="hashtag-input-wrap">
+        <span class="hashtag-prefix">#</span>
+        <input type="text" id="hashtagInput" placeholder="bitcoin" autocomplete="off" autocorrect="off" spellcheck="false" />
+      </div>
+      <button class="btn" id="searchBtn" onclick="search()">Search</button>
+    </div>
+    <div class="options-row">
+      <select id="granularity">
+        <option value="day" selected>By day</option>
+        <option value="hour">By hour</option>
+      </select>
+    </div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    Fetching from X API…
+  </div>
+
+  <div class="results" id="results">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total posts</div>
+        <div class="stat-value accent" id="statTotal">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Daily average</div>
+        <div class="stat-value" id="statAvg">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Peak day</div>
+        <div class="stat-value" id="statPeak">—</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Posts over time</span>
+        <span class="chart-tag" id="chartTag"></span>
+      </div>
+      <canvas id="chart" height="200"></canvas>
+    </div>
+  </div>
+</main>
+
+<!-- Token Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <h2>X Bearer Token</h2>
+    <p>
+      Get your token from the
+      <a href="https://developer.x.com" target="_blank" rel="noopener">X Developer Portal</a>.
+      It's stored only in your browser — never sent anywhere except to X's API.
+    </p>
+    <label class="field-label">Bearer Token</label>
+    <input type="password" id="tokenInput" placeholder="AAAA..." style="margin-bottom: 0;" />
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveToken()">Save token</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Uses the <a href="https://docs.x.com/x-api/posts/get-count-of-recent-posts" target="_blank" rel="noopener">X API v2 — Recent post counts</a> endpoint &nbsp;·&nbsp; Token stored locally in your browser
+</footer>
+
+<script>
+let chartInstance = null;
+
+function loadToken() {
+  return localStorage.getItem('x_bearer_token') || '';
+}
+
+function updateTokenUI() {
+  const t = loadToken();
+  const dot = document.getElementById('tokenDot');
+  const label = document.getElementById('tokenLabel');
+  if (t) {
+    dot.classList.add('active');
+    label.textContent = 'Token set';
+  } else {
+    dot.classList.remove('active');
+    label.textContent = 'Set up token';
+  }
+}
+
+function openModal() {
+  document.getElementById('tokenInput').value = loadToken();
+  document.getElementById('modalOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('tokenInput').focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function closeModalOutside(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+function saveToken() {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (val) localStorage.setItem('x_bearer_token', val);
+  else localStorage.removeItem('x_bearer_token');
+  updateTokenUI();
+  closeModal();
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBox');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function clearError() {
+  document.getElementById('errorBox').style.display = 'none';
+}
+
+function formatLabel(iso, granularity) {
+  const d = new Date(iso);
+  if (granularity === 'day') return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  return d.toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+async function search() {
+  clearError();
+  document.getElementById('results').style.display = 'none';
+
+  const token = loadToken();
+  if (!token) {
+    openModal();
+    return;
+  }
+
+  const raw = document.getElementById('hashtagInput').value.trim();
+  if (!raw) { showError('Enter a hashtag to search.'); return; }
+
+  const tag = '#' + raw.replace(/^#+/, '');
+  const granularity = document.getElementById('granularity').value;
+  const btn = document.getElementById('searchBtn');
+
+  btn.disabled = true;
+  document.getElementById('loading').style.display = 'block';
+
+  try {
+    const res = await fetch(
+      `https://api.x.com/2/tweets/counts/recent?query=${encodeURIComponent(tag)}&granularity=${granularity}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    const data = await res.json();
+    document.getElementById('loading').style.display = 'none';
+
+    if (!res.ok) {
+      const msg = data?.errors?.[0]?.message || data?.title || `Error ${res.status}`;
+      showError(msg);
+      return;
+    }
+
+    if (!data.data?.length) {
+      showError('No data returned. Try a different hashtag.');
+      return;
+    }
+
+    const total = data.meta?.total_tweet_count ?? data.data.reduce((s, d) => s + d.tweet_count, 0);
+    const avg = Math.round(total / data.data.length);
+    const peak = data.data.reduce((a, b) => a.tweet_count > b.tweet_count ? a : b);
+
+    document.getElementById('statTotal').textContent = total.toLocaleString();
+    document.getElementById('statAvg').textContent = avg.toLocaleString();
+    document.getElementById('statPeak').textContent = formatLabel(peak.start, granularity);
+    document.getElementById('chartTag').textContent = tag;
+
+    renderChart(data.data, granularity);
+    document.getElementById('results').style.display = 'block';
+
+  } catch (e) {
+    document.getElementById('loading').style.display = 'none';
+    showError(
+      'Network error — the X API blocks direct browser requests (CORS). ' +
+      'You may need a backend proxy. See the README for options.'
+    );
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderChart(data, granularity) {
+  const labels = data.map(d => formatLabel(d.start, granularity));
+  const counts = data.map(d => d.tweet_count);
+
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(document.getElementById('chart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: counts,
+        backgroundColor: 'rgba(29,155,240,0.25)',
+        borderColor: '#1d9bf0',
+        borderWidth: 1.5,
+        borderRadius: 4,
+        hoverBackgroundColor: 'rgba(29,155,240,0.45)'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2e2e2e',
+          borderWidth: 1,
+          titleColor: '#999',
+          bodyColor: '#f0f0f0',
+          callbacks: { label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' posts' }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#555', font: { size: 11, family: 'Inter' }, maxTicksLimit: 8 },
+          grid: { display: false },
+          border: { display: false }
+        },
+        y: {
+          ticks: { color: '#555', font: { size: 11 }, callback: v => v.toLocaleString() },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { display: false }
+        }
+      }
+    }
+  });
+}
+
+document.getElementById('hashtagInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') search();
+});
+
+updateTokenUI();
+</script>
+</body>
+</html>
